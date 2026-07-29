@@ -1,0 +1,11 @@
+*.sif
+hf/
+apptainer_cache/
+*.bin
+*.safetensors
+*.log
+slurm-*.out
+__pycache__/
+*.pyc
+llm-env/
+.DS_Store
