@@ -1,0 +1,4 @@
+concurrency,requests,prompt_tokens,output_tokens,success,failures,wall_s,throughput_tok_s,lat_p50,lat_p99,ttft_p50,ttft_p99
+1,4,512,256,4,0,10.63,96.4,2.652,2.677,0.014,0.049
+32,128,512,256,128,0,14.78,2213.9,3.688,3.705,0.039,0.056
+64,256,512,256,256,0,16.36,4005.5,4.07,4.102,0.05,0.083
