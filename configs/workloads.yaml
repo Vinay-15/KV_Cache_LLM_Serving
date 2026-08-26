@@ -1,0 +1,32 @@
+workloads:
+  short:
+    prompt_tokens: 128
+    output_tokens: 128
+
+  medium:
+    prompt_tokens: 512
+    output_tokens: 256
+
+  context_heavy:
+    prompt_tokens: 2048
+    output_tokens: 256
+
+  generation_heavy:
+    prompt_tokens: 512
+    output_tokens: 1024
+
+  heavy:
+    prompt_tokens: 2048
+    output_tokens: 1024
+
+concurrency:
+  - 1
+  - 2
+  - 4
+  - 8
+  - 16
+  - 32
+  - 64
+
+requests_per_worker: 1024
+
