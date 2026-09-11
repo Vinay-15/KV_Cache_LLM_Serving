@@ -19,7 +19,7 @@ def percentile(values, p):
     k = min(len(values) - 1, int(round((p / 100.0) * (len(values) - 1))))
     return float(values[k])
 
-def one_request(url, model, prompt, out_tokens, timeout):
+def one_request(request_id, url, model, prompt, out_tokens, timeout):
     payload = {
         "model": model,
         "prompt": prompt,
@@ -91,6 +91,7 @@ def one_request(url, model, prompt, out_tokens, timeout):
             token_count_source = "server_usage"
 
         return {
+            "request_id": request_id,
             "ok": True,
             "ttft": ttft,
             "latency": latency,
@@ -103,6 +104,7 @@ def one_request(url, model, prompt, out_tokens, timeout):
 
     except Exception as e:
         return {
+            "request_id": request_id,
             "ok": False,
             "error": repr(e),
             "latency": time.perf_counter() - t0,
@@ -120,6 +122,7 @@ def main():
     ap.add_argument("--workload", default="unknown")
     ap.add_argument("--run-id", required=True)
     ap.add_argument("--csv", required=True)
+    ap.add_argument("--details-csv", default="")
     args = ap.parse_args()
 
     prompt = build_prompt(args.prompt_tokens)
@@ -135,7 +138,8 @@ def main():
     with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
         results = list(
             pool.map(
-                lambda _: one_request(
+                lambda i: one_request(
+                    i,
                     args.url,
                     args.model,
                     prompt,
@@ -147,6 +151,35 @@ def main():
         )
 
     wall = time.perf_counter() - wall0
+
+    if args.details_csv:
+        fields = [
+            "request_id",
+            "ok",
+            "ttft",
+            "latency",
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens",
+            "token_count_source",
+            "output_chars",
+            "error",
+        ]
+
+        with open(args.details_csv, "w", newline="") as f:
+            writer = csv.DictWriter(
+                f,
+                fieldnames=fields,
+                extrasaction="ignore",
+            )
+
+            writer.writeheader()
+
+            for r in results:
+                writer.writerow(r)
+
+        print(f"   request details -> {args.details_csv}")
+
 
     ok = [r for r in results if r["ok"]]
     fail = [r for r in results if not r["ok"]]

@@ -1,0 +1,2 @@
+run_id,workload,model,concurrency,requests,prompt_tokens_target,output_tokens_target,success,failures,wall_s,throughput_tok_s,lat_p50_s,lat_p95_s,lat_p99_s,ttft_p50_s,ttft_p95_s,ttft_p99_s,completion_tokens,token_count_source
+20260828T215401Z_heavy_c64_8f83d5,heavy,Qwen/Qwen2.5-1.5B-Instruct,64,512,2048,1024,512,0,146.58555619232357,3576.6688998479653,18.259656932204962,19.62529121339321,19.64078590925783,0.07820737455040216,0.15928264055401087,0.21472644340246916,524288,server_usage

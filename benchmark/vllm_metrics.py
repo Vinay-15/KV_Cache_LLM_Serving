@@ -43,6 +43,7 @@ def scrape(url):
 
     return out
 
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", default="http://localhost:8000")
@@ -51,7 +52,114 @@ def main():
     ap.add_argument("--run-id", required=True)
     args = ap.parse_args()
 
-    cols = ["timestamp", "run_id"] + list(METRICS.values())
+    cols = [
+        "timestamp",
+        "run_id",
+        "scrape_ok",
+        "running",
+        "waiting",
+        "kv_usage",
+        "kv_usage_pct",
+        "preemptions_total",
+        "prompt_tokens_total",
+        "generation_tokens_total",
+        "error",
+    ]
+
+    with open(args.csv, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(cols)
+        print(
+            f">> vLLM metrics: " 
+            f"{args.url}/metrics")
+
+        print(f">> writing {args.csv}")
+
+        try:
+            while True:
+                ts = dt.datetime.now(dt.timezone.utc).isoformat()
+                try:
+                    m = scrape(args.url)
+
+                    scrape_ok = 1
+                    error = ""
+
+                    # vLLM 0.8.5 reports this
+                    # as a fraction:
+                    #
+                    # 0.50 = 50%
+                    # 1.00 = 100%
+                    kv_usage_pct = (
+                        m["kv_usage"] * 100.0
+                    )
+
+                    row = [
+                        ts,
+                        args.run_id,
+                        scrape_ok,
+                        m["running"],
+                        m["waiting"],
+                        m["kv_usage"],
+                        kv_usage_pct,
+                        m["preemptions_total"],
+                        m["prompt_tokens_total"],
+                        m["generation_tokens_total"],
+                        error,
+                    ]
+
+                except Exception as e:
+
+                    # IMPORTANT:
+                    # failed scrapes are still written.
+                    row = [
+                        ts,
+                        args.run_id,
+                        0,      # scrape_ok
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                        str(e),
+                    ]
+
+                writer.writerow(row)
+                f.flush()
+
+                time.sleep(args.interval)
+
+        except KeyboardInterrupt:
+
+            print(
+                "\n>> metrics collector stopped"
+            )
+
+
+
+'''def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--url", default="http://localhost:8000")
+    ap.add_argument("--interval", type=float, default=1.0)
+    ap.add_argument("--csv", required=True)
+    ap.add_argument("--run-id", required=True)
+    args = ap.parse_args()
+
+    # cols = ["timestamp", "run_id"] + list(METRICS.values())
+
+    cols = [
+    "time",
+    "scrape_ok",
+    "running",
+    "waiting",
+    "kv_usage",
+    "kv_usage_pct",
+    "preemptions",
+    "prompt_tokens",
+    "gen_tokens",
+    "error",
+    ]
 
     with open(args.csv, "w", newline="") as f:
         writer = csv.writer(f)
@@ -60,35 +168,55 @@ def main():
         print(f">> vLLM metrics: {args.url}/metrics")
         print(f">> writing {args.csv}")
 
+    #    try:
+    #        while True:
+    #               m = scrape(args.url)
+    #            except Exception as e:
+    #                print(f"   scrape failed: {e}")
+    #                time.sleep(args.interval)
+    #                 continue
+
         try:
-            while True:
-                try:
-                    m = scrape(args.url)
-                except Exception as e:
-                    print(f"   scrape failed: {e}")
-                    time.sleep(args.interval)
-                    continue
+            m = scrape(args.url)
+            scrape_ok = 1
+            error = ""
 
-                ts = dt.datetime.now(dt.timezone.utc).isoformat()
+            kv_usage_pct = m["kv_usage"] * 100.0
+        except Exception as e:
+            scrape_ok = 0
+            error = str(e)
+            m = {
+                "running": "",
+                "waiting": "",
+                "kv_usage": "",
+                "preemptions": "",
+                "prompt_tokens": "",
+                "gen_tokens": "",
+            }
+            kv_usage_pct = ""
 
-                row = [ts, args.run_id] + [
-                    round(m[c], 4) for c in METRICS.values()
-                ]
-                writer.writerow(row)
-                f.flush()
 
-                print(
-                    "   "
-                    + " ".join(
-                        f"{k}={m[v]:.2f}"
-                        for k, v in METRICS.items()
-                    )
+
+            ts = dt.datetime.now(dt.timezone.utc).isoformat()
+
+            row = [ts, args.run_id] + [
+                round(m[c], 4) for c in METRICS.values()
+            ]
+            writer.writerow(row)
+            f.flush()
+
+            print(
+                "   "
+                + " ".join(
+                    f"{k}={m[v]:.2f}"
+                    for k, v in METRICS.items()
                 )
+            )
 
-                time.sleep(args.interval)
+            time.sleep(args.interval)
 
         except KeyboardInterrupt:
-            print("\n>> metrics collector stopped")
+            print("\n>> metrics collector stopped")'''
 
 if __name__ == "__main__":
     main()
