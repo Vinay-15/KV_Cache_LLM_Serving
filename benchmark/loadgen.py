@@ -6,11 +6,17 @@ import os
 import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
+import uuid
 
-def build_prompt(n_tokens: int) -> str:
-    # Deliberately repetitive prompt so workload length is controlled.
+def build_prompt(n_tokens: int, request_id: int, prompt_mode: str) -> str:
     sentence = "The quick brown fox jumps over the lazy dog. "
-    return sentence * max(1, n_tokens // 10)
+    body = sentence * max(1, n_tokens // 10)
+    if prompt_mode == "shared":
+        return body
+    # Unique tag at the START: prefix-cache block hashes are chained,
+    # so a unique first block makes every later block unique too.
+    # The uuid nonce prevents cache hits from previous runs.
+    return f"[req={request_id} nonce={uuid.uuid4().hex}]\n" + body
 
 def percentile(values, p):
     if not values:
@@ -123,9 +129,9 @@ def main():
     ap.add_argument("--run-id", required=True)
     ap.add_argument("--csv", required=True)
     ap.add_argument("--details-csv", default="")
+    ap.add_argument("--prompt-mode", choices=["unique", "shared"], default="unique")
     args = ap.parse_args()
 
-    prompt = build_prompt(args.prompt_tokens)
 
     print(
         f">> workload={args.workload} "
@@ -142,7 +148,7 @@ def main():
                     i,
                     args.url,
                     args.model,
-                    prompt,
+                    build_prompt(args.prompt_tokens, i, args.prompt_mode),
                     args.output_tokens,
                     args.timeout,
                 ),
@@ -200,6 +206,7 @@ def main():
     row = {
         "run_id": args.run_id,
         "workload": args.workload,
+        "prompt_mode": args.prompt_mode,
         "model": args.model,
         "concurrency": args.concurrency,
         "requests": args.requests,

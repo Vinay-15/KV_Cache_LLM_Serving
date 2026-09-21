@@ -23,6 +23,7 @@ def main():
     ap.add_argument("--requests-per-worker", type=int, default=1)
     ap.add_argument("--timeout", type=int, default=600)
     ap.add_argument("--results-dir", default=os.path.join(ROOT, "results"))
+    ap.add_argument("--prompt-mode", choices=["unique", "shared"], default="unique")
     args = ap.parse_args()
 
     with open(os.path.join(ROOT, "configs/workloads.yaml")) as f:
@@ -44,6 +45,7 @@ def main():
         + str(args.concurrency)
         + "_"
         + uuid.uuid4().hex[:6]
+        + "_" + args.prompt_mode
     )
 
     run_dir = os.path.join(args.results_dir, run_id)
@@ -90,6 +92,7 @@ def main():
             "--run-id", run_id,
             "--csv", request_csv,
             "--details-csv", details_csv,
+            "--prompt-mode", args.prompt_mode,
         ])
     finally:
         print(">> Load finished. "
