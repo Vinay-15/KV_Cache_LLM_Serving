@@ -7,6 +7,7 @@ import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 import uuid
+import math
 
 def build_prompt(n_tokens: int, request_id: int, prompt_mode: str) -> str:
     sentence = "The quick brown fox jumps over the lazy dog. "
@@ -19,11 +20,13 @@ def build_prompt(n_tokens: int, request_id: int, prompt_mode: str) -> str:
     return f"[req={request_id} nonce={uuid.uuid4().hex}]\n" + body
 
 def percentile(values, p):
-    if not values:
-        return 0.0
-    values = sorted(values)
-    k = min(len(values) - 1, int(round((p / 100.0) * (len(values) - 1))))
-    return float(values[k])
+    """Linear-interpolated percentile. NaN (not 0.0) when there's no data."""
+    vals = sorted(v for v in values if v is not None)
+    if not vals:
+        return float("nan")
+    k = (len(vals) - 1) * p / 100.0
+    lo, hi = math.floor(k), math.ceil(k)
+    return float(vals[lo] + (vals[hi] - vals[lo]) * (k - lo))
 
 def one_request(request_id, url, model, prompt, out_tokens, timeout):
     payload = {
@@ -96,6 +99,10 @@ def one_request(request_id, url, model, prompt, out_tokens, timeout):
         else:
             token_count_source = "server_usage"
 
+        tpot = None
+        if ttft is not None and completion_tokens and completion_tokens > 1:
+            tpot = (latency - ttft) / (completion_tokens - 1)
+
         return {
             "request_id": request_id,
             "ok": True,
@@ -106,12 +113,19 @@ def one_request(request_id, url, model, prompt, out_tokens, timeout):
             "total_tokens": total_tokens,
             "token_count_source": token_count_source,
             "output_chars": len("".join(text_parts)),
+            "tpot": tpot,
+            "timed_out": False,
         }
 
     except Exception as e:
+        reason = getattr(e, "reason", None)
+        timed_out = (isinstance(e, TimeoutError)
+                     or isinstance(reason, TimeoutError)
+                     or "timed out" in str(e).lower())
         return {
             "request_id": request_id,
             "ok": False,
+            "timed_out": timed_out,
             "error": repr(e),
             "latency": time.perf_counter() - t0,
         }
@@ -169,6 +183,8 @@ def main():
             "total_tokens",
             "token_count_source",
             "output_chars",
+            "tpot",
+            "timed_out",
             "error",
         ]
 
@@ -192,6 +208,9 @@ def main():
 
     lat = [r["latency"] for r in ok]
     ttfts = [r["ttft"] for r in ok if r["ttft"] is not None]
+    tpots = [r["tpot"] for r in ok if r.get("tpot") is not None]
+    # Right-censored: a failed request took at least the timeout.
+    lat_all = lat + [max(r["latency"], args.timeout) for r in fail]
 
     completion_tokens = [
         r["completion_tokens"]
@@ -222,6 +241,12 @@ def main():
         "ttft_p50_s": percentile(ttfts, 50),
         "ttft_p95_s": percentile(ttfts, 95),
         "ttft_p99_s": percentile(ttfts, 99),
+        "timeouts": sum(1 for r in fail if r.get("timed_out")),
+        "failure_rate": len(fail) / len(results) if results else float("nan"),
+        "lat_p99_all_s": percentile(lat_all, 99),
+        "tpot_p50_s": percentile(tpots, 50),
+        "tpot_p95_s": percentile(tpots, 95),
+        "tpot_p99_s": percentile(tpots, 99),
         "completion_tokens": total_completion_tokens,
         "token_count_source": (
             ok[0].get("token_count_source", "unknown") if ok else "unknown"
@@ -240,6 +265,12 @@ def main():
         f"p95={row['ttft_p95_s']:.3f}s "
         f"p99={row['ttft_p99_s']:.3f}s"
     )
+    print(
+        f"   TPOT p50={row['tpot_p50_s'] * 1000:.1f}ms "
+        f"p95={row['tpot_p95_s'] * 1000:.1f}ms "
+        f"p99={row['tpot_p99_s'] * 1000:.1f}ms"
+    )
+    print(f"   timeouts={row['timeouts']} p99(incl. failures)={row['lat_p99_all_s']:.3f}s")
 
     if fail:
         print(f"   first error: {fail[0].get('error')}")
