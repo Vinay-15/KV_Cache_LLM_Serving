@@ -49,6 +49,7 @@ def one_request(request_id, url, model, prompt, out_tokens, timeout):
     )
 
     t0 = time.perf_counter()
+    deadline = t0 + timeout
     ttft = None
     text_parts = []
     usage = None
@@ -56,6 +57,8 @@ def one_request(request_id, url, model, prompt, out_tokens, timeout):
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             for raw in resp:
+                if time.perf_counter() > deadline:
+                    raise TimeoutError(f"total deadline of {timeout}s exceeded")
                 line = raw.decode("utf-8", "ignore").strip()
                 if not line.startswith("data:"):
                     continue
@@ -144,6 +147,8 @@ def main():
     ap.add_argument("--csv", required=True)
     ap.add_argument("--details-csv", default="")
     ap.add_argument("--prompt-mode", choices=["unique", "shared"], default="unique")
+    ap.add_argument("--slo-ttft", type=float, default=2.0, help="SLO: max time to first token, seconds")
+    ap.add_argument("--slo-tpot", type=float, default=0.05, help="SLO: max time per output token, seconds")
     args = ap.parse_args()
 
 
@@ -211,6 +216,10 @@ def main():
     tpots = [r["tpot"] for r in ok if r.get("tpot") is not None]
     # Right-censored: a failed request took at least the timeout.
     lat_all = lat + [max(r["latency"], args.timeout) for r in fail]
+    # "Good" = succeeded AND met both SLO limits. Failures are never good.
+    good = [r for r in ok
+            if r["ttft"] is not None and r["ttft"] < args.slo_ttft
+            and r.get("tpot") is not None and r["tpot"] < args.slo_tpot]
 
     completion_tokens = [
         r["completion_tokens"]
@@ -247,6 +256,10 @@ def main():
         "tpot_p50_s": percentile(tpots, 50),
         "tpot_p95_s": percentile(tpots, 95),
         "tpot_p99_s": percentile(tpots, 99),
+        "slo_ttft_s": args.slo_ttft,
+        "slo_tpot_s": args.slo_tpot,
+        "slo_attainment": len(good) / len(results) if results else float("nan"),
+        "goodput_rps": len(good) / wall if wall > 0 else 0.0,
         "completion_tokens": total_completion_tokens,
         "token_count_source": (
             ok[0].get("token_count_source", "unknown") if ok else "unknown"
@@ -271,6 +284,7 @@ def main():
         f"p99={row['tpot_p99_s'] * 1000:.1f}ms"
     )
     print(f"   timeouts={row['timeouts']} p99(incl. failures)={row['lat_p99_all_s']:.3f}s")
+    print(f"   SLO attainment={row['slo_attainment']:.1%} goodput={row['goodput_rps']:.3f} req/s")
 
     if fail:
         print(f"   first error: {fail[0].get('error')}")

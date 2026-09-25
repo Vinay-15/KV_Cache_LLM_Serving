@@ -1,0 +1,9 @@
+request_id,ok,ttft,latency,prompt_tokens,completion_tokens,total_tokens,token_count_source,output_chars,tpot,timed_out,error
+0,False,,3.0063626050250605,,,,,,,True,TimeoutError('total deadline of 3s exceeded')
+1,False,,3.0056796480203047,,,,,,,True,TimeoutError('total deadline of 3s exceeded')
+2,False,,3.0045143249444664,,,,,,,True,TimeoutError('total deadline of 3s exceeded')
+3,False,,3.0047356210416183,,,,,,,True,TimeoutError('total deadline of 3s exceeded')
+4,False,,3.0004068430280313,,,,,,,True,TimeoutError('total deadline of 3s exceeded')
+5,False,,3.01211749704089,,,,,,,True,TimeoutError('total deadline of 3s exceeded')
+6,False,,3.0117550750728697,,,,,,,True,TimeoutError('total deadline of 3s exceeded')
+7,False,,3.0114293119404465,,,,,,,True,TimeoutError('total deadline of 3s exceeded')
