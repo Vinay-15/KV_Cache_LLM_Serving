@@ -8,6 +8,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 import uuid
 import math
+import random
 
 def build_prompt(n_tokens: int, request_id: int, prompt_mode: str) -> str:
     sentence = "The quick brown fox jumps over the lazy dog. "
@@ -28,7 +29,7 @@ def percentile(values, p):
     lo, hi = math.floor(k), math.ceil(k)
     return float(vals[lo] + (vals[hi] - vals[lo]) * (k - lo))
 
-def one_request(request_id, url, model, prompt, out_tokens, timeout):
+def one_request(request_id, url, model, prompt, out_tokens, timeout, t_sched=None):
     payload = {
         "model": model,
         "prompt": prompt,
@@ -48,8 +49,13 @@ def one_request(request_id, url, model, prompt, out_tokens, timeout):
         headers={"Content-Type": "application/json"},
     )
 
-    t0 = time.perf_counter()
+    t_start = time.perf_counter()
+    # Open-loop: latency counts from when the request was SCHEDULED to be sent,
+    # not when a thread got around to sending it (avoids coordinated omission).
+    t0 = t_sched if t_sched is not None else t_start
+    send_lag = t_start - t0
     deadline = t0 + timeout
+
     ttft = None
     text_parts = []
     usage = None
@@ -118,6 +124,7 @@ def one_request(request_id, url, model, prompt, out_tokens, timeout):
             "output_chars": len("".join(text_parts)),
             "tpot": tpot,
             "timed_out": False,
+            "send_lag": send_lag,
         }
 
     except Exception as e:
@@ -131,13 +138,17 @@ def one_request(request_id, url, model, prompt, out_tokens, timeout):
             "timed_out": timed_out,
             "error": repr(e),
             "latency": time.perf_counter() - t0,
+            "send_lag": send_lag,
         }
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", default="http://localhost:8000")
     ap.add_argument("--model", default="Qwen/Qwen2.5-1.5B-Instruct")
-    ap.add_argument("--concurrency", type=int, required=True)
+    ap.add_argument("--concurrency", type=int)
+    ap.add_argument("--arrival-rate", type=float, help="open-loop: mean requests/second, Poisson arrivals")
+    ap.add_argument("--seed", type=int, default=0, help="seed for the random arrival gaps")
+    ap.add_argument("--max-inflight", type=int, default=1024, help="open-loop: max client threads")
     ap.add_argument("--requests", type=int, required=True)
     ap.add_argument("--prompt-tokens", type=int, required=True)
     ap.add_argument("--output-tokens", type=int, required=True)
@@ -151,29 +162,46 @@ def main():
     ap.add_argument("--slo-tpot", type=float, default=0.05, help="SLO: max time per output token, seconds")
     args = ap.parse_args()
 
+    if (args.concurrency is None) == (args.arrival_rate is None):
+        ap.error("give exactly one of --concurrency (closed-loop) or --arrival-rate (open-loop)")
+    mode = "open" if args.arrival_rate is not None else "closed"
 
-    print(
-        f">> workload={args.workload} "
-        f"requests={args.requests} concurrency={args.concurrency} "
-        f"prompt~{args.prompt_tokens} output={args.output_tokens}"
-    )
+    load = (f"rate={args.arrival_rate}/s seed={args.seed}" if mode == "open"
+            else f"concurrency={args.concurrency}")
+    print(f">> workload={args.workload} mode={mode} requests={args.requests} {load} "
+          f"prompt~{args.prompt_tokens} output={args.output_tokens}")
 
     wall0 = time.perf_counter()
 
-    with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
-        results = list(
-            pool.map(
-                lambda i: one_request(
-                    i,
-                    args.url,
-                    args.model,
-                    build_prompt(args.prompt_tokens, i, args.prompt_mode),
-                    args.output_tokens,
-                    args.timeout,
-                ),
-                range(args.requests),
+    if mode == "closed":
+        with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
+            results = list(
+                pool.map(
+                    lambda i: one_request(
+                        i, args.url, args.model,
+                        build_prompt(args.prompt_tokens, i, args.prompt_mode),
+                        args.output_tokens, args.timeout,
+                    ),
+                    range(args.requests),
+                )
             )
-        )
+    else:
+        rng = random.Random(args.seed)
+        futures = []
+        t_next = wall0
+        with ThreadPoolExecutor(max_workers=args.max_inflight) as pool:
+            for i in range(args.requests):
+                prompt = build_prompt(args.prompt_tokens, i, args.prompt_mode)
+                # Random gap with mean 1/rate. Added to a running clock, so small
+                # sleep errors don't accumulate and drag the real rate down.
+                t_next += rng.expovariate(args.arrival_rate)
+                delay = t_next - time.perf_counter()
+                if delay > 0:
+                    time.sleep(delay)
+                futures.append(pool.submit(
+                    one_request, i, args.url, args.model, prompt,
+                    args.output_tokens, args.timeout, t_next))
+            results = [f.result() for f in futures]
 
     wall = time.perf_counter() - wall0
 
@@ -190,6 +218,7 @@ def main():
             "output_chars",
             "tpot",
             "timed_out",
+            "send_lag",
             "error",
         ]
 
@@ -237,6 +266,10 @@ def main():
         "prompt_mode": args.prompt_mode,
         "model": args.model,
         "concurrency": args.concurrency,
+        "mode": mode,
+        "arrival_rate": args.arrival_rate,
+        "seed": args.seed,
+        "send_lag_max_s": max((r["send_lag"] for r in results), default=float("nan")),
         "requests": args.requests,
         "prompt_tokens_target": args.prompt_tokens,
         "output_tokens_target": args.output_tokens,
@@ -285,6 +318,7 @@ def main():
     )
     print(f"   timeouts={row['timeouts']} p99(incl. failures)={row['lat_p99_all_s']:.3f}s")
     print(f"   SLO attainment={row['slo_attainment']:.1%} goodput={row['goodput_rps']:.3f} req/s")
+    print(f"   client send lag max={row['send_lag_max_s'] * 1000:.1f}ms")
 
     if fail:
         print(f"   first error: {fail[0].get('error')}")

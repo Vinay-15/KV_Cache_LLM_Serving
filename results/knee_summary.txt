@@ -1,0 +1,29 @@
+  c  n  goodput req/s        SLO attain           tok/s                  TTFT p99 s             preemptions     
+ 16  3  1.21 [1.20-1.21]     1.00 [1.00-1.00]     1237 [1232-1242]       1.32 [1.29-1.38]       0 [0-0]         
+ 20  3  1.44 [1.44-1.44]     1.00 [1.00-1.00]     1471 [1469-1474]       1.61 [1.61-1.62]       0 [0-0]         
+ 24  3  1.64 [1.63-1.65]     1.00 [0.99-1.00]     1686 [1684-1687]       1.95 [1.95-1.96]       0 [0-0]         
+ 28  3  1.45 [1.44-1.47]     0.95 [0.95-0.96]     1566 [1561-1571]       2.31 [2.28-2.34]       17 [17-17]      
+ 32  3  1.41 [1.40-1.42]     0.85 [0.84-0.85]     1709 [1704-1713]       8.10 [8.06-8.14]       46 [46-47]      
+ 40  3  1.00 [1.00-1.01]     0.59 [0.59-0.59]     1742 [1741-1744]       17.04 [17.00-17.11]    80 [80-80]      
+ 48  3  0.21 [0.21-0.22]     0.12 [0.12-0.12]     1774 [1770-1777]       17.65 [17.55-17.73]    96 [94-97]      
+20260927T230721Z_heavy_c16_fc4c4c_unique      max_running= 16 max_waiting=  6 peak_kv=0.655
+20260927T230831Z_heavy_c20_d5f6d3_unique      max_running= 20 max_waiting=  9 peak_kv=0.808
+20260927T230944Z_heavy_c24_5d8fef_unique      max_running= 24 max_waiting= 13 peak_kv=0.981
+20260927T231100Z_heavy_c28_552d98_unique      max_running= 28 max_waiting= 17 peak_kv=0.999
+20260927T231231Z_heavy_c32_6d44f2_unique      max_running= 32 max_waiting= 22 peak_kv=1.000
+20260927T231405Z_heavy_c40_100fd4_unique      max_running= 35 max_waiting= 29 peak_kv=1.000
+20260927T231556Z_heavy_c48_503cef_unique      max_running= 36 max_waiting= 37 peak_kv=0.999
+20260927T231804Z_heavy_c16_527eec_unique      max_running= 16 max_waiting=  4 peak_kv=0.652
+20260927T231915Z_heavy_c20_ed2afa_unique      max_running= 20 max_waiting=  9 peak_kv=0.808
+20260927T232028Z_heavy_c24_afb778_unique      max_running= 24 max_waiting= 13 peak_kv=0.981
+20260927T232143Z_heavy_c28_fa9b7e_unique      max_running= 28 max_waiting= 16 peak_kv=1.000
+20260927T232314Z_heavy_c32_604c68_unique      max_running= 32 max_waiting= 21 peak_kv=1.000
+20260927T232448Z_heavy_c40_648787_unique      max_running= 36 max_waiting= 29 peak_kv=1.000
+20260927T232639Z_heavy_c48_c8ba2a_unique      max_running= 35 max_waiting= 37 peak_kv=1.000
+20260927T232847Z_heavy_c16_0dd3c8_unique      max_running= 16 max_waiting=  5 peak_kv=0.650
+20260927T232957Z_heavy_c20_5b419c_unique      max_running= 20 max_waiting= 10 peak_kv=0.809
+20260927T233110Z_heavy_c24_1e38bc_unique      max_running= 24 max_waiting= 13 peak_kv=0.981
+20260927T233226Z_heavy_c28_dddf67_unique      max_running= 28 max_waiting= 17 peak_kv=1.000
+20260927T233357Z_heavy_c32_2dbc95_unique      max_running= 32 max_waiting= 21 peak_kv=1.000
+20260927T233531Z_heavy_c40_88e29c_unique      max_running= 36 max_waiting= 29 peak_kv=0.999
+20260927T233722Z_heavy_c48_521da5_unique      max_running= 36 max_waiting= 36 peak_kv=0.999
