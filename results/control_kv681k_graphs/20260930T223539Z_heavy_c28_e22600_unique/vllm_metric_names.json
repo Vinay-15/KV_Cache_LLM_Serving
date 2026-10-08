@@ -1,0 +1,10 @@
+{
+  "running": "vllm:num_requests_running",
+  "waiting": "vllm:num_requests_waiting",
+  "kv_usage": "vllm:gpu_cache_usage_perc",
+  "preemptions_total": "vllm:num_preemptions_total",
+  "prompt_tokens_total": "vllm:prompt_tokens_total",
+  "generation_tokens_total": "vllm:generation_tokens_total",
+  "prefix_queries_total": "vllm:gpu_prefix_cache_queries_total",
+  "prefix_hits_total": "vllm:gpu_prefix_cache_hits_total"
+}

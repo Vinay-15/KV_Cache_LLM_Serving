@@ -57,6 +57,8 @@ def one_request(request_id, url, model, prompt, out_tokens, timeout, t_sched=Non
     deadline = t0 + timeout
 
     ttft = None
+    t_last = None
+    max_gap = 0.0
     text_parts = []
     usage = None
 
@@ -84,8 +86,14 @@ def one_request(request_id, url, model, prompt, out_tokens, timeout, t_sched=Non
 
                 txt = choices[0].get("text", "")
                 if txt:
+                    now = time.perf_counter()
                     if ttft is None:
-                        ttft = time.perf_counter() - t0
+                        ttft = now - t0
+                    else:
+                        # Longest pause between tokens: a preempted request
+                        # freezes here while its KV is recomputed.
+                        max_gap = max(max_gap, now - t_last)
+                    t_last = now
                     text_parts.append(txt)
 
         latency = time.perf_counter() - t0
@@ -125,6 +133,7 @@ def one_request(request_id, url, model, prompt, out_tokens, timeout, t_sched=Non
             "tpot": tpot,
             "timed_out": False,
             "send_lag": send_lag,
+            "max_gap": max_gap if ttft is not None else None,
         }
 
     except Exception as e:
@@ -217,6 +226,7 @@ def main():
             "token_count_source",
             "output_chars",
             "tpot",
+            "max_gap",
             "timed_out",
             "send_lag",
             "error",
@@ -243,6 +253,8 @@ def main():
     lat = [r["latency"] for r in ok]
     ttfts = [r["ttft"] for r in ok if r["ttft"] is not None]
     tpots = [r["tpot"] for r in ok if r.get("tpot") is not None]
+    gaps = [r["max_gap"] for r in ok if r.get("max_gap") is not None]
+
     # Right-censored: a failed request took at least the timeout.
     lat_all = lat + [max(r["latency"], args.timeout) for r in fail]
     # "Good" = succeeded AND met both SLO limits. Failures are never good.
@@ -289,6 +301,9 @@ def main():
         "tpot_p50_s": percentile(tpots, 50),
         "tpot_p95_s": percentile(tpots, 95),
         "tpot_p99_s": percentile(tpots, 99),
+        "max_gap_p50_s": percentile(gaps, 50),
+        "max_gap_p99_s": percentile(gaps, 99),
+        "stalled_1s": sum(1 for g in gaps if g > 1.0),
         "slo_ttft_s": args.slo_ttft,
         "slo_tpot_s": args.slo_tpot,
         "slo_attainment": len(good) / len(results) if results else float("nan"),
@@ -316,6 +331,8 @@ def main():
         f"p95={row['tpot_p95_s'] * 1000:.1f}ms "
         f"p99={row['tpot_p99_s'] * 1000:.1f}ms"
     )
+    print(f"   max token gap p50={row['max_gap_p50_s']:.3f}s "
+          f"p99={row['max_gap_p99_s']:.3f}s stalled>1s={row['stalled_1s']}")
     print(f"   timeouts={row['timeouts']} p99(incl. failures)={row['lat_p99_all_s']:.3f}s")
     print(f"   SLO attainment={row['slo_attainment']:.1%} goodput={row['goodput_rps']:.3f} req/s")
     print(f"   client send lag max={row['send_lag_max_s'] * 1000:.1f}ms")

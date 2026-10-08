@@ -50,6 +50,5 @@ apptainer exec --nv \
     --model "$VLLM_MODEL" \
     --host "$VLLM_HOST" \
     --port "$VLLM_PORT" \
-    --enforce-eager \
     --max-model-len "$VLLM_MAX_MODEL_LEN" \
     --gpu-memory-utilization "$VLLM_GPU_MEMORY_UTILIZATION"
