@@ -1,10 +1,10 @@
-# Sentinel: KV-Cache-Aware Admission Control for vLLM
+# KV-Cache-Aware Admission Control for vLLM
 
-Sentinel is a measurement harness and an admission controller for LLM serving. It shows that **vLLM over-admits requests under KV-cache memory pressure**, which leads to preemptions and multi-second mid-answer freezes that standard serving metrics don't catch. It then fixes this with a **lookahead admission controller**: a small proxy in front of vLLM that admits a request only when it can prove no preemption will occur.
+This project is a measurement harness and an admission controller for LLM serving. It shows that **vLLM over-admits requests under KV-cache memory pressure**, which leads to preemptions and multi-second mid-answer freezes that standard serving metrics don't catch. It then fixes this with a **lookahead admission controller** which is a small proxy in front of vLLM that admits a request only when it can prove no preemption will occur.
 
 **Headline results** (same traffic, same GPU, same KV budget):
 
-| | vLLM default | Static peak reservation | **Sentinel lookahead** |
+| | vLLM default | Static peak reservation | **With lookahead** |
 |---|---|---|---|
 | Preemptions (open-loop sweep) | 517 | 0 | **0** |
 | Requests frozen > 1 s mid-answer | 78 | 0 | **0** |
@@ -27,7 +27,7 @@ To the user, a preempted request **freezes mid-answer** for seconds, then resume
 
 | | |
 |---|---|
-| Cluster | CU Boulder Alpine (Slurm) |
+| Cluster | HPC Cluster (Slurm) |
 | GPU | NVIDIA A100 MIG slice (3g.20gb). A full A100 80GB was used as a cross-check |
 | Serving | vLLM 0.8.5 (V1 engine, CUDA graphs on) in an Apptainer container |
 | Model | Qwen2.5-1.5B-Instruct, bf16 |
@@ -57,9 +57,9 @@ Findings:
 4. **Standard SLOs miss the freezes.** At 28 clients the SLO reports 96% attainment, yet ~10% of responses froze mid-generation (p99 freeze 4.9 s). The `max_gap` metric (longest pause between two streamed tokens) was added to catch this.
 5. **The limit is memory, not compute.** The same knee and over-admission appear on a full A100 80GB with the same 4,735-block budget.
 
-![Throughput vs goodput](figures/closed/fig1_throughput_vs_goodput.png)
-![Preemptions and hidden stalls](figures/closed/fig2_preemption_and_hidden_stalls.png)
-![Over-admission timeline](figures/closed/fig3_overadmission_timeline.png)
+![Throughput vs goodput](figures/closed_loop/fig1_throughput_vs_goodput.png)
+![Preemptions and hidden stalls](figures/closed_loop/fig2_preemption_and_hidden_stalls.png)
+![Over-admission timeline](figures/closed_loop/fig3_overadmission_timeline.png)
 
 The timeline shows the mechanism: vLLM spikes to ~35 running, memory hits 100%, it evicts requests one by one back down to ~24, a group finishes, and it over-admits again.
 
@@ -75,7 +75,7 @@ The timeline shows the mechanism: vLLM spikes to ~35 running, memory hits 100%, 
 
 Note the 1.4 row: with staggered arrivals, **27 requests ran safely**, more than the 24 that fit when all are at full size, because requests at different stages hold different amounts of memory. The lookahead controller is designed to exploit exactly this.
 
-## 4. Phase 3: the Sentinel admission controller
+## 4. Phase 3: the admission controller
 
 `sentinel/proxy.py` is an asyncio (aiohttp) proxy between clients and vLLM. vLLM itself is unmodified.
 
